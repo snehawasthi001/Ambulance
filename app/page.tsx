@@ -16,10 +16,12 @@ import { PatientData, VitalSigns, EmergencyStatus, Hospital } from '@/types';
 import { Activity, AlertCircle, Sun, Moon, Zap, Shield, Heart, TrendingUp, Phone, MapPin, Navigation, X, Menu } from 'lucide-react';
 import { AnimatedButton } from '@/components/ui/animated-button';
 
+import { ThemeToggle } from '@/components/theme-toggle';
+
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 
 export default function IntegratedEmergencyDashboard() {
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(true); // Keep for legacy logic if needed, but rely on ThemeProvider
   const [currentStatus, setCurrentStatus] = useState<EmergencyStatus>('idle');
   const [patientData, setPatientData] = useState<PatientData | null>(null);
   const [vitals, setVitals] = useState<VitalSigns | null>(null);
@@ -55,7 +57,7 @@ export default function IntegratedEmergencyDashboard() {
           // Initialize map
           map.current = new mapboxgl.Map({
             container: mapContainer.current!,
-            style: isDarkMode ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11',
+            style: 'mapbox://styles/mapbox/streets-v12', // Always colorful
             center: location,
             zoom: 12
           });
@@ -139,7 +141,7 @@ export default function IntegratedEmergencyDashboard() {
 
           map.current = new mapboxgl.Map({
             container: mapContainer.current!,
-            style: isDarkMode ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11',
+            style: 'mapbox://styles/mapbox/streets-v12', // Always colorful
             center: defaultLocation,
             zoom: 12
           });
@@ -155,50 +157,160 @@ export default function IntegratedEmergencyDashboard() {
     };
   }, []);
 
-  // Update map style when theme changes
-  useEffect(() => {
-    if (map.current) {
-      map.current.setStyle(isDarkMode ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11');
+  // Route state
+  const routeCoordinates = useRef<[number, number][]>([]);
+  const traveledCoordinates = useRef<[number, number][]>([]);
+  const animationRef = useRef<number>();
+
+  // Helper to fetch route from Mapbox
+  const getRoute = async (start: [number, number], end: [number, number]) => {
+    try {
+      const response = await fetch(
+        `https://api.mapbox.com/directions/v5/mapbox/driving/${start[0]},${start[1]};${end[0]},${end[1]}?steps=true&geometries=geojson&access_token=${mapboxgl.accessToken}`
+      );
+      const data = await response.json();
+      const route = data.routes[0].geometry.coordinates;
+      return route;
+    } catch (error) {
+      console.error('Error fetching route:', error);
+      return null;
     }
-  }, [isDarkMode]);
+  };
 
-  // Animate ambulance movement
+  // Initialize route layers
   useEffect(() => {
-    if (currentStatus === 'ambulance_en_route_to_patient' || currentStatus === 'en_route_to_hospital') {
-      const interval = setInterval(() => {
-        setAmbulancePosition(prev => {
-          if (!prev || !userLocation) return prev;
+    if (!map.current) return;
 
-          const target = currentStatus === 'ambulance_en_route_to_patient'
-            ? userLocation
-            : selectedHospitalId
-              ? hospitals.find(h => h.id === selectedHospitalId)?.location || prev
-              : prev;
+    const mapInstance = map.current; // Capture ref value
 
-          // Move towards target
-          const dx = (target[0] - prev[0]) * 0.05;
-          const dy = (target[1] - prev[1]) * 0.05;
-          const newPos: [number, number] = [prev[0] + dx, prev[1] + dy];
-
-          // Update marker
-          if (ambulanceMarker.current) {
-            ambulanceMarker.current.setLngLat(newPos);
-          } else if (map.current) {
-            const el = document.createElement('div');
-            el.innerHTML = '🚑';
-            el.style.fontSize = '32px';
-            ambulanceMarker.current = new mapboxgl.Marker(el)
-              .setLngLat(newPos)
-              .addTo(map.current);
+    mapInstance.on('load', () => {
+      // Planned Route Layer (Gray)
+      if (!mapInstance.getSource('route')) {
+        mapInstance.addSource('route', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: []
+            }
           }
-
-          return newPos;
         });
-      }, 100);
 
-      return () => clearInterval(interval);
-    }
-  }, [currentStatus, userLocation, selectedHospitalId, hospitals]);
+        mapInstance.addLayer({
+          id: 'route',
+          type: 'line',
+          source: 'route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#888',
+            'line-width': 4,
+            'line-opacity': 0.5
+          }
+        });
+      }
+
+      // Traveled Route Layer (Highlighted/Glow)
+      if (!mapInstance.getSource('traveled-route')) {
+        mapInstance.addSource('traveled-route', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: []
+            }
+          }
+        });
+
+        // Glow effect (wider, lower opacity)
+        mapInstance.addLayer({
+          id: 'traveled-route-glow',
+          type: 'line',
+          source: 'traveled-route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#3b82f6', // Blue glow
+            'line-width': 12,
+            'line-opacity': 0.3,
+            'line-blur': 4
+          }
+        });
+
+        // Core line (sharper)
+        mapInstance.addLayer({
+          id: 'traveled-route',
+          type: 'line',
+          source: 'traveled-route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#60a5fa', // Lighter blue
+            'line-width': 4,
+            'line-opacity': 1
+          }
+        });
+      }
+    });
+  }, []);
+
+  const animateRoute = (route: [number, number][], onComplete?: () => void) => {
+    let step = 0;
+    const speed = 2; // Adjust speed as needed
+
+    const animate = () => {
+      if (step < route.length) {
+        const currentPos = route[step];
+        setAmbulancePosition(currentPos);
+
+        // Update marker
+        if (ambulanceMarker.current) {
+          ambulanceMarker.current.setLngLat(currentPos);
+        } else if (map.current) {
+          const el = document.createElement('div');
+          el.innerHTML = '🚑';
+          el.style.fontSize = '32px';
+          ambulanceMarker.current = new mapboxgl.Marker(el)
+            .setLngLat(currentPos)
+            .addTo(map.current);
+        }
+
+        // Update traveled path
+        traveledCoordinates.current.push(currentPos);
+
+        if (map.current?.getSource('traveled-route')) {
+          (map.current.getSource('traveled-route') as mapboxgl.GeoJSONSource).setData({
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: traveledCoordinates.current
+            }
+          });
+        }
+
+        // Pan map to follow ambulance if needed
+        map.current?.panTo(currentPos, { duration: 0 });
+
+        step += 1;
+        animationRef.current = requestAnimationFrame(animate);
+      } else {
+        if (onComplete) onComplete();
+      }
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
+  };
 
   const handleSymptomAnalysis = async (analysis: any) => {
     console.log('Symptom analysis received:', analysis);
@@ -246,34 +358,64 @@ export default function IntegratedEmergencyDashboard() {
     setCurrentStatus('processing');
   };
 
-  const handleSelectHospital = (match: any) => {
+  const handleSelectHospital = async (match: any) => {
     setSelectedHospitalId(match.hospital.id);
     setCurrentStatus('dispatching');
 
-    // Zoom to hospital
-    if (map.current) {
-      map.current.flyTo({
-        center: match.hospital.location,
-        zoom: 14,
-        duration: 2000
+    // Reset previous routes
+    traveledCoordinates.current = [];
+    if (map.current?.getSource('traveled-route')) {
+      (map.current.getSource('traveled-route') as mapboxgl.GeoJSONSource).setData({
+        type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] }
       });
     }
 
-    setTimeout(() => {
+    // 1. Ambulance -> Patient
+    // For demo, assume ambulance starts at a fixed offset or its last known position
+    // If no ambulance position, start near user
+    const startPos = ambulancePosition || [userLocation![0] + 0.01, userLocation![1] + 0.01];
+
+    const routeToPatient = await getRoute(startPos, userLocation!);
+
+    if (routeToPatient && map.current) {
+      // Draw planned route
+      (map.current.getSource('route') as mapboxgl.GeoJSONSource).setData({
+        type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: routeToPatient }
+      });
+
       setCurrentStatus('ambulance_en_route_to_patient');
-      setTimeout(() => {
+
+      animateRoute(routeToPatient, async () => {
         setCurrentStatus('patient_picked_up');
-        setTimeout(() => {
-          setCurrentStatus('en_route_to_hospital');
-          setTimeout(() => {
-            setCurrentStatus('arriving_at_hospital');
-            setTimeout(() => {
+
+        // Wait a bit
+        setTimeout(async () => {
+          // 2. Patient -> Hospital
+          const hospitalLoc = match.hospital.location;
+          const routeToHospital = await getRoute(userLocation!, hospitalLoc);
+
+          if (routeToHospital) {
+            // Reset traveled for next leg or keep it? Let's reset for clarity or keep to show full history.
+            // User said "route covered... highlighted", usually implies the whole session. 
+            // But the route line source needs to be updated to the new plan.
+
+            if (map.current?.getSource('route')) {
+              (map.current.getSource('route') as mapboxgl.GeoJSONSource).setData({
+                type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: routeToHospital }
+              });
+            }
+
+            // Clear traveled for new leg to avoid jumping lines if we just append
+            traveledCoordinates.current = [];
+
+            setCurrentStatus('en_route_to_hospital');
+            animateRoute(routeToHospital, () => {
               setCurrentStatus('arrived_at_hospital');
-            }, 3000);
-          }, 5000);
-        }, 3000);
-      }, 5000);
-    }, 2000);
+            });
+          }
+        }, 2000);
+      });
+    }
   };
 
   const handleQuickDispatch = async () => {
@@ -287,64 +429,40 @@ export default function IntegratedEmergencyDashboard() {
   };
 
   return (
-    <div className={`h-screen flex flex-col overflow-hidden transition-colors duration-500 ${isDarkMode
-      ? 'bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900'
-      : 'bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50'
-      }`}>
+    <div className="h-screen flex flex-col overflow-hidden bg-background text-foreground">
       {/* Header */}
-      <header className={`sticky top-0 z-50 backdrop-blur-xl border-b transition-colors ${isDarkMode
-        ? 'bg-slate-900/50 border-white/10'
-        : 'bg-white/50 border-gray-200/50'
-        }`}>
+      <header className="sticky top-0 z-50 backdrop-blur-xl border-b bg-primary/10 border-primary/20">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between">
             {/* Logo & Title */}
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className={`p-2 rounded-xl transition-all ${isDarkMode
-                  ? 'bg-white/5 hover:bg-white/10 text-white'
-                  : 'bg-gray-100 hover:bg-gray-200 text-gray-900'
-                  }`}
+                className="p-2 rounded-xl transition-all bg-primary/10 hover:bg-primary/20 text-primary"
               >
                 {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isDarkMode
-                ? 'bg-gradient-to-br from-red-500 to-pink-600'
-                : 'bg-gradient-to-br from-red-500 to-pink-500'
-                } shadow-lg shadow-red-500/50`}>
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-primary text-primary-foreground shadow-lg shadow-primary/20">
                 <span className="text-2xl">🚑</span>
               </div>
               <div>
-                <h1 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'
-                  }`}>
+                <h1 className="text-2xl font-bold text-foreground">
                   Emergency Response
                 </h1>
-                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'
-                  }`}>
+                <p className="text-sm text-muted-foreground">
                   AI-Powered Medical Dispatch
                 </p>
               </div>
             </div>
 
             {/* Quick Actions */}
-            <div className="flex items-center gap-3">
-              <button className={`p-3 rounded-xl transition-all ${isDarkMode
-                ? 'bg-white/5 hover:bg-white/10 text-white'
-                : 'bg-gray-100 hover:bg-gray-200 text-gray-900'
-                } border ${isDarkMode ? 'border-white/10' : 'border-gray-200'
-                }`}>
+            <div className="flex items-center gap-4">
+              <button className="p-3 rounded-xl transition-all bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20">
                 <Phone className="w-5 h-5" />
               </button>
-              <button
-                onClick={() => setIsDarkMode(!isDarkMode)}
-                className={`p-3 rounded-xl transition-all ${isDarkMode
-                  ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-white'
-                  : 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white'
-                  } shadow-lg hover:scale-105`}
-              >
-                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-              </button>
+              <div className="relative z-[60]">
+                <ThemeToggle />
+              </div>
             </div>
           </div>
         </div>
@@ -353,37 +471,31 @@ export default function IntegratedEmergencyDashboard() {
       {/* Status Banner */}
       {currentStatus !== 'idle' && (
         <div className="px-6 py-3 z-40">
-          <div className={`rounded-2xl p-4 backdrop-blur-xl border ${isDarkMode
-            ? 'bg-blue-500/10 border-blue-500/30'
-            : 'bg-blue-100/80 border-blue-300/50'
-            }`}>
+          <div className="rounded-2xl p-4 backdrop-blur-xl border bg-primary/10 border-primary/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${currentStatus === 'arrived_at_hospital'
-                  ? isDarkMode ? 'bg-green-500/20' : 'bg-green-100'
-                  : isDarkMode ? 'bg-blue-500/20' : 'bg-blue-100'
+                  ? 'bg-green-500/20'
+                  : 'bg-primary/20'
                   }`}>
                   <Activity className={`w-6 h-6 ${currentStatus === 'arrived_at_hospital'
-                    ? isDarkMode ? 'text-green-400' : 'text-green-600'
-                    : isDarkMode ? 'text-blue-400 animate-pulse' : 'text-blue-600 animate-pulse'
+                    ? 'text-green-500'
+                    : 'text-primary animate-pulse'
                     }`} />
                 </div>
                 <div>
-                  <p className={`font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+                  <p className="font-bold text-foreground">
                     Emergency Active
                   </p>
-                  <p className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'} capitalize`}>
+                  <p className="text-sm text-muted-foreground capitalize">
                     {currentStatus.replace(/_/g, ' ')}
                   </p>
                 </div>
               </div>
               {currentStatus !== 'arrived_at_hospital' && (
-                <div className={`flex items-center gap-2 px-4 py-2 rounded-full ${isDarkMode ? 'bg-blue-500/20' : 'bg-blue-200/50'
-                  }`}>
-                  <span className={`w-2 h-2 rounded-full animate-pulse ${isDarkMode ? 'bg-blue-400' : 'bg-blue-600'
-                    }`} />
-                  <span className={`text-sm font-medium ${isDarkMode ? 'text-blue-300' : 'text-blue-700'
-                    }`}>
+                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10">
+                  <span className="w-2 h-2 rounded-full animate-pulse bg-primary" />
+                  <span className="text-sm font-medium text-primary">
                     In Progress
                   </span>
                 </div>
@@ -394,10 +506,10 @@ export default function IntegratedEmergencyDashboard() {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {/* Sidebar */}
         <div className={`${isSidebarOpen ? 'w-96' : 'w-0'
-          } transition-all duration-300 overflow-hidden flex-shrink-0`}>
+          } transition-all duration-300 overflow-hidden flex-shrink-0 border-r border-primary/20 bg-primary/5 backdrop-blur-xl text-foreground`}>
           <div className="h-full overflow-y-auto p-6 space-y-6">
             {/* Voice Recorder */}
             <VoiceRecorder onSymptomAnalysis={handleSymptomAnalysis} />
@@ -451,39 +563,27 @@ export default function IntegratedEmergencyDashboard() {
           {/* Welcome Overlay */}
           {currentStatus === 'idle' && !isSidebarOpen && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className={`max-w-md rounded-3xl p-12 backdrop-blur-xl border pointer-events-auto ${isDarkMode
-                ? 'bg-gradient-to-br from-white/5 to-white/10 border-white/10'
-                : 'bg-gradient-to-br from-white/80 to-white/60 border-gray-200/50'
-                } shadow-2xl`}>
+              <div className="max-w-md rounded-3xl p-12 backdrop-blur-xl border border-border pointer-events-auto bg-card/50 shadow-2xl">
                 <div className="text-center space-y-6">
                   <div className="relative inline-block">
-                    <div className={`absolute inset-0 rounded-full blur-2xl ${isDarkMode ? 'bg-blue-500/30' : 'bg-blue-400/30'
-                      }`} />
-                    <div className={`relative w-24 h-24 mx-auto rounded-full flex items-center justify-center ${isDarkMode
-                      ? 'bg-gradient-to-br from-blue-500 to-purple-600'
-                      : 'bg-gradient-to-br from-blue-500 to-indigo-600'
-                      } shadow-2xl`}>
+                    <div className="absolute inset-0 rounded-full blur-2xl bg-primary/30" />
+                    <div className="relative w-24 h-24 mx-auto rounded-full flex items-center justify-center bg-gradient-to-br from-blue-500 to-indigo-600 shadow-2xl">
                       <span className="text-5xl">🎤</span>
                     </div>
                   </div>
 
                   <div>
-                    <h2 className={`text-3xl font-bold mb-3 ${isDarkMode ? 'text-white' : 'text-gray-900'
-                      }`}>
+                    <h2 className="text-3xl font-bold mb-3 text-foreground">
                       Get Immediate Help
                     </h2>
-                    <p className={`text-base ${isDarkMode ? 'text-gray-300' : 'text-gray-700'
-                      }`}>
+                    <p className="text-base text-muted-foreground">
                       Open the sidebar and describe your symptoms using voice
                     </p>
                   </div>
 
                   <button
                     onClick={() => setIsSidebarOpen(true)}
-                    className={`px-6 py-3 rounded-xl font-semibold transition-all ${isDarkMode
-                      ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white'
-                      : 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white'
-                      } shadow-lg hover:scale-105`}
+                    className="px-6 py-3 rounded-xl font-semibold transition-all bg-primary text-primary-foreground shadow-lg hover:scale-105"
                   >
                     Open Controls
                   </button>

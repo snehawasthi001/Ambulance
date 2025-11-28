@@ -76,16 +76,16 @@ export function JourneyTracker({
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                    <h3 className="text-xl font-bold text-foreground flex items-center gap-2">
                         <Navigation className="w-6 h-6" />
                         Journey Tracker
                     </h3>
                     {eta && !isCompleted && (
-                        <p className="text-sm text-white/70 mt-1">ETA: {eta}</p>
+                        <p className="text-sm text-muted-foreground mt-1">ETA: {eta}</p>
                     )}
                 </div>
                 {isCompleted && (
-                    <div className="bg-green-500/20 text-green-300 px-3 py-1 rounded-full text-sm font-medium border border-green-500/30">
+                    <div className="bg-green-500/20 text-green-500 px-3 py-1 rounded-full text-sm font-medium border border-green-500/30">
                         Completed
                     </div>
                 )}
@@ -93,13 +93,13 @@ export function JourneyTracker({
 
             {/* Driver & Vehicle Info */}
             {(driverName || vehicleNumber) && (
-                <div className="flex items-center justify-between bg-white/5 rounded-xl p-3">
+                <div className="flex items-center justify-between bg-muted/20 rounded-xl p-3">
                     <div>
                         {driverName && (
-                            <p className="text-white font-medium">{driverName}</p>
+                            <p className="text-foreground font-medium">{driverName}</p>
                         )}
                         {vehicleNumber && (
-                            <p className="text-white/70 text-sm">{vehicleNumber}</p>
+                            <p className="text-muted-foreground text-sm">{vehicleNumber}</p>
                         )}
                     </div>
                     <div className="w-10 h-10 bg-gradient-to-br from-red-500 to-red-600 rounded-full flex items-center justify-center text-xl">
@@ -111,8 +111,8 @@ export function JourneyTracker({
             {/* Hospital Info */}
             {hospitalName && (
                 <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
-                    <p className="text-xs text-blue-300 mb-1">Destination</p>
-                    <p className="text-white font-medium flex items-center gap-2">
+                    <p className="text-xs text-blue-500 mb-1">Destination</p>
+                    <p className="text-foreground font-medium flex items-center gap-2">
                         <Building2 className="w-4 h-4" />
                         {hospitalName}
                     </p>
@@ -132,8 +132,8 @@ export function JourneyTracker({
                             {idx < stages.length - 1 && (
                                 <div className="absolute left-5 top-10 w-0.5 h-12 -ml-px">
                                     <div className={`h-full transition-all duration-500 ${isPast ? 'bg-gradient-to-b from-green-500 to-green-400' :
-                                            isActive ? 'bg-gradient-to-b from-blue-500 to-transparent' :
-                                                'bg-white/20'
+                                        isActive ? 'bg-gradient-to-b from-blue-500 to-transparent' :
+                                            'bg-muted-foreground/20'
                                         }`} />
                                 </div>
                             )}
@@ -145,12 +145,12 @@ export function JourneyTracker({
                   relative z-10 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300
                   ${isPast ? 'bg-gradient-to-br from-green-500 to-green-600 shadow-lg shadow-green-500/50' :
                                         isActive ? 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/50 scale-110' :
-                                            'bg-white/10 border-2 border-white/20'}
+                                            'bg-muted/20 border-2 border-muted-foreground/20'}
                 `}>
                                     {isPast ? (
                                         <CheckCircle2 className="w-5 h-5 text-white" />
                                     ) : (
-                                        <div className="text-white">{stage.icon}</div>
+                                        <div className={isActive ? 'text-white' : 'text-muted-foreground'}>{stage.icon}</div>
                                     )}
 
                                     {/* Pulse Animation for Active */}
@@ -164,20 +164,20 @@ export function JourneyTracker({
 
                                 {/* Content */}
                                 <div className="flex-1 pt-1">
-                                    <p className={`font-semibold ${isPast ? 'text-green-300' :
-                                            isActive ? 'text-white' :
-                                                'text-white/50'
+                                    <p className={`font-semibold ${isPast ? 'text-green-500' :
+                                        isActive ? 'text-foreground' :
+                                            'text-muted-foreground'
                                         }`}>
                                         {stage.label}
                                     </p>
-                                    <p className={`text-sm mt-0.5 ${isActive ? 'text-white/70' : 'text-white/40'
+                                    <p className={`text-sm mt-0.5 ${isActive ? 'text-muted-foreground' : 'text-muted-foreground/60'
                                         }`}>
                                         {stage.description}
                                     </p>
 
                                     {/* Active Indicator */}
                                     {isActive && (
-                                        <div className="mt-2 flex items-center gap-2 text-xs text-blue-300">
+                                        <div className="mt-2 flex items-center gap-2 text-xs text-blue-500">
                                             <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
                                             In Progress
                                         </div>
@@ -190,12 +190,12 @@ export function JourneyTracker({
             </div>
 
             {/* Progress Bar */}
-            <div className="pt-4 border-t border-white/10">
-                <div className="flex items-center justify-between text-xs text-white/50 mb-2">
+            <div className="pt-4 border-t border-border">
+                <div className="flex items-center justify-between text-xs text-muted-foreground mb-2">
                     <span>Progress</span>
                     <span>{Math.round((currentStageIndex / (stages.length - 1)) * 100)}%</span>
                 </div>
-                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                <div className="h-2 bg-muted/20 rounded-full overflow-hidden">
                     <div
                         className="h-full bg-gradient-to-r from-blue-500 to-green-500 transition-all duration-500 rounded-full"
                         style={{ width: `${(currentStageIndex / (stages.length - 1)) * 100}%` }}

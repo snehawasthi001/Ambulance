@@ -98,28 +98,28 @@ export function VitalSignsPanel({ vitals: initialVitals, realtime = false }: Vit
         <div className="space-y-4">
             {/* Header */}
             <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <h3 className="text-xl font-bold text-foreground flex items-center gap-2">
                     <Activity className="w-6 h-6" />
                     Vital Signs
                     {realtime && (
-                        <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full border border-green-500/30">
+                        <span className="text-xs bg-green-500/20 text-green-500 px-2 py-1 rounded-full border border-green-500/30">
                             Live
                         </span>
                     )}
                 </h3>
-                <span className="text-xs text-white/50">
+                <span className="text-xs text-muted-foreground">
                     {new Date(vitals.timestamp).toLocaleTimeString()}
                 </span>
             </div>
 
             {/* Abnormalities Alert */}
             {abnormalities.length > 0 && (
-                <GlassmorphicCard className="p-4 bg-red-500/20 border-red-500/50">
+                <GlassmorphicCard className="p-4 bg-destructive/10 border-destructive/20">
                     <div className="flex items-start gap-3">
-                        <div className="w-2 h-2 bg-red-500 rounded-full mt-1.5 animate-pulse" />
+                        <div className="w-2 h-2 bg-destructive rounded-full mt-1.5 animate-pulse" />
                         <div>
-                            <p className="text-red-200 font-semibold text-sm">Abnormal Readings Detected</p>
-                            <ul className="text-red-300 text-xs mt-1 space-y-0.5">
+                            <p className="text-destructive font-semibold text-sm">Abnormal Readings Detected</p>
+                            <ul className="text-destructive/80 text-xs mt-1 space-y-0.5">
                                 {abnormalities.map((abn, idx) => (
                                     <li key={idx}>• {abn}</li>
                                 ))}
@@ -140,7 +140,7 @@ export function VitalSignsPanel({ vitals: initialVitals, realtime = false }: Vit
                     return (
                         <GlassmorphicCard
                             key={idx}
-                            className={`p-4 ${isAbnormal ? 'border-red-500/50 bg-red-500/10' : ''}`}
+                            className={`p-4 ${isAbnormal ? 'border-destructive/50 bg-destructive/10' : ''}`}
                             hover={false}
                         >
                             <div className="space-y-2">
@@ -150,24 +150,24 @@ export function VitalSignsPanel({ vitals: initialVitals, realtime = false }: Vit
                                         <Icon className="w-4 h-4 text-white" />
                                     </div>
                                     {isAbnormal && (
-                                        <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                                        <span className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
                                     )}
                                 </div>
 
                                 {/* Value */}
                                 <div>
-                                    <p className={`text-2xl font-bold ${isAbnormal ? 'text-red-400' : 'text-white'
+                                    <p className={`text-2xl font-bold ${isAbnormal ? 'text-destructive' : 'text-foreground'
                                         }`}>
                                         {vital.value}
                                     </p>
-                                    <p className="text-xs text-white/50">{vital.unit}</p>
+                                    <p className="text-xs text-muted-foreground">{vital.unit}</p>
                                 </div>
 
                                 {/* Label */}
-                                <p className="text-xs text-white/70 font-medium">{vital.label}</p>
+                                <p className="text-xs text-muted-foreground font-medium">{vital.label}</p>
 
                                 {/* Normal Range */}
-                                <p className="text-xs text-white/40">
+                                <p className="text-xs text-muted-foreground/70">
                                     Normal: {vital.normal[0]}-{vital.normal[1]}
                                 </p>
                             </div>
@@ -179,10 +179,10 @@ export function VitalSignsPanel({ vitals: initialVitals, realtime = false }: Vit
             {/* Overall Status */}
             <GlassmorphicCard className="p-4">
                 <div className="flex items-center justify-between">
-                    <span className="text-white/70 text-sm">Overall Status:</span>
-                    <span className={`font-semibold ${abnormalities.length === 0 ? 'text-green-400' :
-                            abnormalities.length <= 2 ? 'text-yellow-400' :
-                                'text-red-400'
+                    <span className="text-muted-foreground text-sm">Overall Status:</span>
+                    <span className={`font-semibold ${abnormalities.length === 0 ? 'text-green-500' :
+                        abnormalities.length <= 2 ? 'text-yellow-500' :
+                            'text-destructive'
                         }`}>
                         {abnormalities.length === 0 ? 'Stable' :
                             abnormalities.length <= 2 ? 'Monitoring Required' :

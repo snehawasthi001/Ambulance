@@ -170,6 +170,8 @@ export interface SymptomAnalysis {
     needsBlood: boolean;
     bloodType?: BloodType;
     estimatedCondition?: string;
+    isMedicalEmergency?: boolean; // New field for validation
+    validationError?: string; // Reason if not a medical emergency
 }
 
 export interface GeneratedReport {

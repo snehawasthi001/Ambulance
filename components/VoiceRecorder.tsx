@@ -15,6 +15,7 @@ export function VoiceRecorder({ onSymptomAnalysis }: VoiceRecorderProps) {
     const { setVoiceTranscript, setIsRecording: setStoreRecording } = useEmergencyStore();
     const [isProcessing, setIsProcessing] = useState(false);
     const [audioLevel, setAudioLevel] = useState(0);
+    const [validationError, setValidationError] = useState<string | null>(null);
 
     useEffect(() => {
         setStoreRecording(isRecording);
@@ -33,22 +34,32 @@ export function VoiceRecorder({ onSymptomAnalysis }: VoiceRecorderProps) {
     }, [isRecording]);
 
     const handleStartRecording = () => {
+        setValidationError(null);
         resetTranscript();
         startRecording();
     };
 
     const handleStopAndProcess = async () => {
         stopRecording();
+        setValidationError(null);
 
         if (transcript.trim()) {
             setIsProcessing(true);
             try {
                 const analysis = await geminiService.analyzeSymptoms(transcript);
-                if (onSymptomAnalysis) {
-                    onSymptomAnalysis(analysis);
+
+                // Check if the input is a valid medical emergency
+                if (analysis.isMedicalEmergency === false) {
+                    const errorMsg = analysis.validationError || 'Please describe a valid medical emergency or symptom.';
+                    setValidationError(errorMsg);
+                } else {
+                    if (onSymptomAnalysis) {
+                        onSymptomAnalysis(analysis);
+                    }
                 }
             } catch (err) {
                 console.error('Error analyzing symptoms:', err);
+                setValidationError('Failed to analyze symptoms. Please try again.');
             } finally {
                 setIsProcessing(false);
             }
@@ -63,11 +74,11 @@ export function VoiceRecorder({ onSymptomAnalysis }: VoiceRecorderProps) {
 
     if (!isSupported) {
         return (
-            <div className="rounded-2xl p-6 backdrop-blur-xl border bg-white/60 dark:bg-white/5 border-gray-200 dark:border-white/10 shadow-xl">
+            <div className="rounded-2xl p-6 backdrop-blur-xl border bg-card/50 border-border shadow-xl">
                 <div className="text-center">
-                    <MicOff className="w-12 h-12 mx-auto mb-3 text-red-600 dark:text-red-400" />
-                    <p className="text-gray-900 dark:text-white font-medium">Voice recording not supported</p>
-                    <p className="text-gray-600 dark:text-white/70 text-sm mt-2">Please use Chrome or Edge browser</p>
+                    <MicOff className="w-12 h-12 mx-auto mb-3 text-destructive" />
+                    <p className="text-foreground font-medium">Voice recording not supported</p>
+                    <p className="text-muted-foreground text-sm mt-2">Please use Chrome or Edge browser</p>
                 </div>
             </div>
         );
@@ -75,16 +86,16 @@ export function VoiceRecorder({ onSymptomAnalysis }: VoiceRecorderProps) {
 
     return (
         <div className="space-y-4">
-            <div className="rounded-2xl p-6 backdrop-blur-xl border bg-white/60 dark:bg-white/5 border-gray-200 dark:border-white/10 shadow-xl space-y-4">
+            <div className="rounded-2xl p-6 backdrop-blur-xl border bg-card/50 border-border shadow-xl space-y-4">
                 {/* Header */}
                 <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
                         <Mic className="w-5 h-5" />
                         Describe Your Symptoms
                     </h3>
                     {isRecording && (
-                        <span className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 animate-pulse font-medium">
-                            <span className="w-2 h-2 bg-red-500 rounded-full animate-ping" />
+                        <span className="flex items-center gap-2 text-sm text-destructive animate-pulse font-medium">
+                            <span className="w-2 h-2 bg-destructive rounded-full animate-ping" />
                             Recording...
                         </span>
                     )}
@@ -141,8 +152,8 @@ export function VoiceRecorder({ onSymptomAnalysis }: VoiceRecorderProps) {
 
                 {/* Transcript Display - Real-time */}
                 {transcript && (
-                    <div className="bg-gray-100 dark:bg-black/30 rounded-xl p-4 max-h-32 overflow-y-auto border border-gray-200 dark:border-white/10">
-                        <p className="text-sm text-gray-800 dark:text-white/90 leading-relaxed">
+                    <div className="bg-muted/50 rounded-xl p-4 max-h-32 overflow-y-auto border border-border">
+                        <p className="text-sm text-foreground leading-relaxed">
                             {transcript}
                             {isRecording && <span className="animate-pulse">|</span>}
                         </p>
@@ -151,22 +162,24 @@ export function VoiceRecorder({ onSymptomAnalysis }: VoiceRecorderProps) {
 
                 {/* Instructions */}
                 {!isRecording && !transcript && (
-                    <div className="text-center text-gray-600 dark:text-white/70 text-sm space-y-2">
+                    <div className="text-center text-muted-foreground text-sm space-y-2">
                         <p className="font-medium">Click the microphone to start recording</p>
-                        <p className="text-xs text-gray-500 dark:text-white/50">Describe your symptoms, pain level, and any medical concerns</p>
+                        <p className="text-xs opacity-70">Describe your symptoms, pain level, and any medical concerns</p>
                     </div>
                 )}
 
                 {/* Error Display */}
-                {error && error !== 'Error: no-speech' && (
-                    <div className="bg-red-100 dark:bg-red-500/20 border border-red-300 dark:border-red-500/50 rounded-lg p-3">
-                        <p className="text-red-700 dark:text-red-200 text-sm font-medium">{error}</p>
+                {(error && error !== 'Error: no-speech') || validationError ? (
+                    <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                        <p className="text-destructive text-sm font-medium">
+                            {validationError || error}
+                        </p>
                     </div>
-                )}
+                ) : null}
 
                 {/* Processing Indicator */}
                 {isProcessing && (
-                    <div className="flex items-center justify-center gap-2 text-blue-600 dark:text-blue-300">
+                    <div className="flex items-center justify-center gap-2 text-primary">
                         <Loader2 className="w-4 h-4 animate-spin" />
                         <span className="text-sm font-medium">Analyzing symptoms with AI...</span>
                     </div>

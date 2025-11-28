@@ -11,12 +11,14 @@ export class GeminiService {
      */
     async analyzeSymptoms(transcript: string): Promise<SymptomAnalysis> {
         try {
-            const prompt = `You are a medical AI assistant. Analyze the following patient symptoms and provide a structured response.
+            const prompt = `You are a medical AI assistant. Analyze the following patient symptoms and determine if this is a valid medical emergency or health-related query.
 
 Patient's description: "${transcript}"
 
 Provide your analysis in the following JSON format:
 {
+  "isMedicalEmergency": true/false,
+  "validationError": "Reason if not a medical emergency (e.g., 'Input is unrelated to health', 'Gibberish input')",
   "symptoms": ["list of identified symptoms"],
   "severity": "Critical|High|Moderate|Low",
   "urgency": 1-10 (number),
@@ -26,7 +28,10 @@ Provide your analysis in the following JSON format:
   "estimatedCondition": "brief description of possible condition"
 }
 
-Important: Return ONLY the JSON object, no additional text.`;
+Important:
+1. If the input is NOT related to health, medicine, or emergencies (e.g., "I want pizza", "Hello world", random gibberish), set "isMedicalEmergency" to false and provide a "validationError".
+2. If it IS related, set "isMedicalEmergency" to true and fill the rest.
+3. Return ONLY the JSON object, no additional text.`;
 
             const result = await this.model.generateContent(prompt);
             const response = await result.response;
@@ -117,6 +122,28 @@ Important: Return ONLY the JSON object, no additional text.`;
         const requiredSpecializations: HospitalSpecialization[] = ['General'];
         let needsBlood = false;
 
+        // Basic validation for mock service
+        const medicalKeywords = [
+            'pain', 'hurt', 'bleed', 'blood', 'break', 'broken', 'ache', 'fever', 'cough',
+            'breath', 'choke', 'burn', 'cut', 'wound', 'sick', 'vomit', 'nausea',
+            'dizzy', 'faint', 'unconscious', 'attack', 'stroke', 'seizure', 'pregnant',
+            'labor', 'baby', 'child', 'accident', 'crash', 'injury', 'poison', 'bite'
+        ];
+
+        const isMedical = medicalKeywords.some(keyword => lowerTranscript.includes(keyword));
+
+        if (!isMedical && transcript.length > 5) {
+            return {
+                symptoms: [],
+                severity: 'Low',
+                urgency: 0,
+                requiredSpecializations: [],
+                needsBlood: false,
+                isMedicalEmergency: false,
+                validationError: "Input does not appear to be a medical emergency. Please describe symptoms."
+            };
+        }
+
         // Cardiac symptoms
         if (lowerTranscript.includes('chest pain') || lowerTranscript.includes('heart')) {
             symptoms.push('Chest pain', 'Cardiac distress');
@@ -190,7 +217,8 @@ Important: Return ONLY the JSON object, no additional text.`;
             urgency,
             requiredSpecializations: Array.from(new Set(requiredSpecializations)),
             needsBlood,
-            estimatedCondition: `Patient requires ${severity.toLowerCase()} priority medical attention for ${symptoms[0].toLowerCase()}.`
+            estimatedCondition: `Patient requires ${severity.toLowerCase()} priority medical attention for ${symptoms[0].toLowerCase()}.`,
+            isMedicalEmergency: true
         };
     }
 
